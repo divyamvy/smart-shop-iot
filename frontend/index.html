@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Shop Dashboard — IoT + CLIP ViT Zero-Shot Fusion</title>
+    <link rel="stylesheet" href="style.css?v=5" />
+    <style>
+      .cnn-badge {
+        font-family: var(--mono, monospace);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        padding: 4px 8px;
+        border: 1px solid #e8e8e8;
+        background: #f5f5f5;
+        color: #666;
+      }
+      .cnn-badge.ready {
+        border-color: #0a0a0a;
+        background: #0a0a0a;
+        color: #ffffff;
+        font-weight: 600;
+      }
+      .metrics {
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr) !important;
+      }
+      .vision-box {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        border: 1px solid #e8e8e8;
+        background: #ffffff;
+        margin-bottom: 18px;
+      }
+      .vision-stage {
+        position: relative;
+        background: #0a0a0a;
+        height: 255px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #webcam {
+        display: none;
+      }
+      #vision-canvas {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .vision-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        text-align: center;
+        font-family: var(--mono, monospace);
+        font-size: 11px;
+        color: #aaa;
+        background: rgba(10, 10, 10, 0.82);
+        pointer-events: none;
+      }
+      .vision-overlay.hidden {
+        display: none !important;
+      }
+      .vision-controls {
+        padding: 12px 16px;
+        border-left: 1px solid #e8e8e8;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .vision-status-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 6px;
+        border-bottom: 1px solid #e8e8e8;
+      }
+      .vision-key {
+        font-family: var(--mono, monospace);
+        font-size: 9px;
+        letter-spacing: 0.08em;
+        color: #666;
+      }
+      .vision-locked {
+        font-family: var(--mono, monospace);
+        font-size: 12px;
+        font-weight: 600;
+        color: #0a0a0a;
+      }
+      .vision-btn-grid {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      .btn-outline {
+        background: #fff;
+        color: #0a0a0a;
+        border: 1px solid #e8e8e8;
+        padding: 8px 12px;
+        width: auto;
+      }
+      .btn-outline:hover {
+        border-color: #0a0a0a;
+      }
+      .sku-bar {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 6px;
+        margin-top: 4px;
+      }
+      .sku-bar input {
+        padding: 6px 8px;
+        font-size: 11px;
+        font-family: var(--mono, monospace);
+      }
+      .sku-tags {
+        font-family: var(--mono, monospace);
+        font-size: 9px;
+        color: #666;
+        margin-top: 4px;
+        line-height: 1.4;
+      }
+      .vision-sublabel {
+        font-family: var(--mono, monospace);
+        font-size: 9px;
+        letter-spacing: 0.06em;
+        color: #666;
+        margin-top: 8px;
+        margin-bottom: 2px;
+      }
+      .sample-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        margin-top: 4px;
+      }
+      .chip-btn {
+        padding: 6px 4px;
+        font-family: var(--mono, monospace);
+        font-size: 10px;
+        background: #f5f5f5;
+        border: 1px solid #e8e8e8;
+        color: #333;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .chip-btn:hover {
+        border-color: #0a0a0a;
+        background: #fff;
+        font-weight: 600;
+      }
+      .item-badge {
+        display: inline-block;
+        font-family: var(--mono, monospace);
+        font-size: 9px;
+        padding: 1px 4px;
+        border: 1px solid #e8e8e8;
+        color: #666;
+        margin-left: 4px;
+      }
+      .feed-tag.t-ret {
+        border-color: #666;
+        color: #666;
+      }
+      .feed-tag.t-cnn {
+        background: #333;
+        color: #fff;
+        border-color: #333;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="app">
+      <div class="topbar">
+        <div class="logo">
+          SMART SHOP <span>/ IOT + TWO-STAGE SSD &amp; CLIP-ViT FUSION</span>
+        </div>
+
+        <div class="top-right">
+          <div class="cnn-badge" id="cnn-badge">VISION: LOADING SSD…</div>
+
+          <div>
+            <span class="conn-dot" id="cdot"></span>
+            <span class="conn-label" id="clab">connecting…</span>
+          </div>
+
+          <div class="session-tag" id="session-tag">no customer</div>
+        </div>
+      </div>
+
+      <div class="body">
+        <div class="left">
+          <div class="alert" id="theft-alert">
+            ⚠ THEFT DETECTED — Item removed without billing confirmation!
+          </div>
+
+          <div class="label">live metrics</div>
+
+          <div class="metrics">
+            <div class="metric">
+              <div class="metric-val" id="m-total">₹0</div>
+              <div class="metric-lbl">Cart total</div>
+            </div>
+
+            <div class="metric">
+              <div class="metric-val" id="m-bills">0</div>
+              <div class="metric-lbl">Bills today</div>
+            </div>
+
+            <div class="metric">
+              <div class="metric-val" id="m-rev">₹0</div>
+              <div class="metric-lbl">Revenue today</div>
+            </div>
+
+            <div class="metric">
+              <div class="metric-val" id="m-conf">—</div>
+              <div class="metric-lbl">Last Vision Conf.</div>
+            </div>
+          </div>
+
+          <!-- TWO-STAGE RETAIL VISION: SSD-MOBILENET-V2 (LOCALIZATION) + OPENAI CLIP ViT-B/32 (ZERO-SHOT SKU) -->
+          <div class="label">
+            two-stage cart-rim vision: ssd-mobilenet-v2 (box/person) + openai clip vit-b/32 (zero-shot sku)
+          </div>
+
+          <div class="vision-box">
+            <div class="vision-stage">
+              <video id="webcam" autoplay playsinline muted></video>
+              <canvas id="vision-canvas" width="640" height="480"></canvas>
+              <div class="vision-overlay" id="vision-placeholder">
+                Vision Ready — Click Start Live Webcam to Track Person &amp; Retail SKUs
+              </div>
+            </div>
+
+            <div class="vision-controls">
+              <div class="vision-status-row">
+                <div>
+                  <div class="vision-key">DETECTED CART ITEM FOR NEXT PICK:</div>
+                  <div class="vision-locked" id="locked-item">
+                    None (Weight-Only Fallback)
+                  </div>
+                </div>
+                <div style="text-align: right">
+                  <div class="vision-key">CLIP ViT ENGINE:</div>
+                  <div class="vision-locked" id="clip-status" style="font-size: 11px">
+                    Loading ViT-B/32…
+                  </div>
+                </div>
+              </div>
+
+              <div class="vision-btn-grid">
+                <button class="btn btn-primary" id="cam-btn" onclick="toggleWebcam()">
+                  START LIVE WEBCAM
+                </button>
+                <button class="btn btn-outline" onclick="clearLockedItem()">
+                  CLEAR LOCK
+                </button>
+              </div>
+
+              <div class="vision-sublabel">
+                ZERO-SHOT STORE SKU DATABASE (ADD ANY NEW TEXT SKU — NO TRAINING NEEDED):
+              </div>
+              <div class="sku-bar">
+                <input
+                  type="text"
+                  id="sku-input"
+                  placeholder="Add SKU text to database (e.g. Calculator, Keys, Charger)..."
+                />
+                <button class="btn btn-outline" onclick="addStoreSKU()">
+                  + ADD SKU TO DB
+                </button>
+              </div>
+              <div class="sku-tags" id="sku-list-display"></div>
+
+              <div class="vision-sublabel">
+                OR SIMULATE CART-RIM CAMERA SNAPSHOT:
+              </div>
+              <div class="sample-grid">
+                <button class="chip-btn" onclick="runSampleInference('Water Bottle')">
+                  Scan Bottle
+                </button>
+                <button class="chip-btn" onclick="runSampleInference('Coffee Mug')">
+                  Scan Coffee Cup
+                </button>
+                <button class="chip-btn" onclick="runSampleInference('Headphones')">
+                  Scan Headphones
+                </button>
+                <button class="chip-btn" onclick="runSampleInference('Smartphone')">
+                  Scan Phone
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="label">sensor fusion activity feed</div>
+
+          <div class="feed" id="feed">
+            <div class="feed-empty" id="feed-empty">Waiting for activity…</div>
+          </div>
+
+          <div class="label">today's bills</div>
+
+          <div class="history" id="hist">
+            <div class="hist-empty" id="hist-empty">No bills yet.</div>
+          </div>
+        </div>
+
+        <div class="right">
+          <div class="label" style="margin-top: 0">
+            live cart &amp; pending bill
+          </div>
+
+          <div class="bill-box">
+            <div class="bill-head">
+              <span class="bill-title">Cart Summary (Exact Delta Tracked)</span>
+              <span class="bill-status" id="bstatus">WAITING</span>
+            </div>
+
+            <div class="bill-body">
+              <div id="bill-content">
+                <div class="bill-empty">Cart is currently empty…</div>
+              </div>
+            </div>
+
+            <div class="bill-total" id="bill-total">
+              <span>Total</span>
+              <span class="bill-total-amt" id="bill-total-val">₹0</span>
+            </div>
+          </div>
+
+          <div class="label">generate pdf invoice</div>
+
+          <div class="form-box">
+            <div class="form-group">
+              <label>Customer name</label>
+              <input type="text" id="cust-name" placeholder="e.g. Rahul Sharma" />
+            </div>
+
+            <div class="form-group">
+              <label>Phone</label>
+              <input type="text" id="cust-phone" placeholder="e.g. 9876543210" />
+            </div>
+
+            <div class="form-group">
+              <label>Shop name</label>
+              <input type="text" id="shop-name" value="Smart Shop" />
+            </div>
+
+            <div class="form-group">
+              <label>Shopkeeper name</label>
+              <input type="text" id="keeper-name" placeholder="Operator ID / Name" />
+            </div>
+
+            <button
+              class="btn btn-primary"
+              id="pdf-btn"
+              onclick="openModal()"
+              disabled
+            >
+              DOWNLOAD PDF BILL
+            </button>
+
+            <button
+              class="btn btn-ghost"
+              id="clear-btn"
+              onclick="clearBill()"
+            >
+              CLEAR &amp; RESET SESSION
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="modal">
+      <div class="modal-box">
+        <div class="modal-head">
+          <span class="modal-title">BILL PREVIEW</span>
+          <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+
+        <div class="modal-body">
+          <div id="preview"></div>
+        </div>
+
+        <div class="modal-foot">
+          <button class="btn btn-primary" onclick="printBill()">
+            PRINT / SAVE AS PDF
+          </button>
+          <button class="btn btn-ghost show" onclick="closeModal()">
+            CLOSE
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+    <script src="script.js?v=5"></script>
+  </body>
+</html>
