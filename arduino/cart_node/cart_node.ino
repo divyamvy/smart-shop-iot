@@ -1,5 +1,5 @@
 // ============================
-// CART NODE
+// CART NODE (WOKWI SIMULATION)
 // ============================
 
 #include <WiFi.h>
@@ -8,38 +8,23 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-// ============================
-// WIFI
-// ============================
-const char* ssid     = "Piyush";
-const char* password = "112233445566";
+const char* ssid     = "Wokwi-GUEST";
+const char* password = "";
 
-// ============================
-// HIVEMQ CLOUD
-// ============================
 const char* mqtt_server   = "fa5e66fc548146f783420bef085c1154.s1.eu.hivemq.cloud";
 const char* mqtt_username = "smartshop";
 const char* mqtt_password = "Smartshop123";
 
-// ============================
-// HARDWARE
-// ============================
 WiFiClientSecure  espClient;
 PubSubClient      client(espClient);
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 #define BASKET_FS 2
 
-// ============================
-// STATE
-// ============================
 int  total          = 0;
-int  prevBasketSent = -999;  // force publish on first loop
+int  prevBasketSent = -999;
 bool showingBill    = false;
 
-// ============================
-// HELPERS
-// ============================
 void lcdMsg(const char* line0, const char* line1 = "") {
   lcd.clear();
   lcd.setCursor(0, 0); lcd.print(line0);
@@ -56,17 +41,11 @@ void showTotal() {
   }
 }
 
-// ============================
-// WIFI
-// ============================
 void setup_wifi() {
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) delay(500);
 }
 
-// ============================
-// MQTT CALLBACK
-// ============================
 void callback(char* topic, byte* payload, unsigned int length) {
   String msg = "";
   for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
@@ -75,7 +54,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
     total = msg.toInt();
     showTotal();
   }
-
   else if (String(topic) == "shop/bill") {
     showingBill = true;
     lcdMsg("FINAL BILL", ("Rs " + msg).c_str());
@@ -86,7 +64,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
     showingBill = false;
     showIdle();
   }
-
   else if (String(topic) == "shop/theft") {
     lcdMsg("!! THEFT !!", "ALERT");
     delay(5000);
@@ -94,12 +71,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
-// ============================
-// MQTT RECONNECT
-// ============================
 void reconnect() {
   while (!client.connected()) {
-    if (client.connect("CART_NODE", mqtt_username, mqtt_password)) {
+    if (client.connect("CART_NODE_WOKWI", mqtt_username, mqtt_password)) {
       client.subscribe("shop/total");
       client.subscribe("shop/bill");
       client.subscribe("shop/theft");
@@ -109,9 +83,6 @@ void reconnect() {
   }
 }
 
-// ============================
-// SETUP
-// ============================
 void setup() {
   Serial.begin(115200);
   Wire.begin(6, 7);
@@ -124,16 +95,12 @@ void setup() {
   client.setCallback(callback);
 }
 
-// ============================
-// LOOP
-// ============================
 void loop() {
   if (!client.connected()) reconnect();
   client.loop();
 
   int basketValue = analogRead(BASKET_FS);
 
-  // Only publish when value has meaningfully changed — avoids flooding shop node
   if (abs(basketValue - prevBasketSent) > 20) {
     client.publish("cart/basket", String(basketValue).c_str());
     prevBasketSent = basketValue;
